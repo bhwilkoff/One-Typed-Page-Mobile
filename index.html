@@ -352,8 +352,105 @@
             font-size: 14px;
             line-height: 1.5;
             white-space: pre-wrap;
-            max-height: 70vh;
+            max-height: 60vh;
             overflow-y: auto;
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 5px;
+            padding: 15px;
+            margin: 15px 0;
+        }
+
+        .modal-actions {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        .attribution {
+            position: absolute;
+            bottom: 10px;
+            right: 10px;
+            z-index: 50;
+            opacity: 0.7;
+            transition: opacity 0.3s ease;
+        }
+
+        .attribution:hover {
+            opacity: 1;
+        }
+
+        .info-btn {
+            width: 24px;
+            height: 24px;
+            border-radius: 12px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            color: #fff;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            transition: all 0.2s ease;
+        }
+
+        .info-btn:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        .attribution-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.9);
+            z-index: 3000;
+            display: none;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .attribution-modal.active {
+            display: flex;
+        }
+
+        .attribution-content {
+            background: rgba(20, 20, 20, 0.95);
+            padding: 25px;
+            border-radius: 10px;
+            max-width: 90%;
+            max-height: 90%;
+            overflow-y: auto;
+            backdrop-filter: blur(20px);
+            text-align: center;
+        }
+
+        .attribution-content h3 {
+            margin-bottom: 15px;
+            color: #fff;
+        }
+
+        .attribution-content p {
+            margin-bottom: 15px;
+            line-height: 1.6;
+            color: rgba(255, 255, 255, 0.9);
+        }
+
+        .attribution-content a {
+            color: #66c0f4;
+            text-decoration: none;
+        }
+
+        .attribution-content a:hover {
+            text-decoration: underline;
+        }
+
+        .attribution-content .btn {
+            margin: 5px;
         }
 
         /* Touch-friendly improvements */
@@ -404,6 +501,10 @@
 
             <div class="hide-ui-hint" id="hideUIHint">Tap image to hide UI</div>
 
+            <div class="attribution">
+                <button class="info-btn" onclick="showAttribution()" title="About this app">i</button>
+            </div>
+
             <div class="navigation" id="navigation">
                 <button class="nav-btn" onclick="navigateLeft()" id="leftBtn">‹</button>
                 <div class="nav-info">
@@ -428,6 +529,33 @@
                 <button class="close-btn" onclick="closeModal()">&times;</button>
             </div>
             <div class="markdown-content" id="markdownContent"></div>
+            <div class="modal-actions">
+                <button class="btn" onclick="copyMarkdown()">📋 Copy Markdown</button>
+                <button class="btn" onclick="downloadMarkdown()">💾 Download .md File</button>
+                <button class="btn" onclick="closeModal()">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Attribution Modal -->
+    <div class="attribution-modal" id="attributionModal">
+        <div class="attribution-content">
+            <div class="modal-header">
+                <h3>About One Typed Page</h3>
+                <button class="close-btn" onclick="closeAttribution()">&times;</button>
+            </div>
+            <p>This mobile viewer is built for <strong>One Typed Page</strong>, a daily project by <strong>Daniel Marleau</strong>.</p>
+            <p>One Typed Page is a commitment to type one page every day on a manual typewriter, sharing the raw, unedited results. It's about the process, the practice, and the physical act of typing.</p>
+            <p><strong>About the project:</strong><br>
+            "Each page is typed once, with no corrections, no edits, no spell-check. What you see is what came out of the typewriter, mistakes and all. It's about embracing imperfection and finding beauty in the process."</p>
+            <div style="margin-top: 20px;">
+                <button class="btn" onclick="window.open('https://onetypedpage.com/', '_blank')">Visit One Typed Page</button>
+                <button class="btn" onclick="window.open('https://onetypedpage.com/about/', '_blank')">About the Project</button>
+                <button class="btn" onclick="window.open('https://onetypedpage.com/submissions/', '_blank')">Submit Your Own Page</button>
+            </div>
+            <p style="margin-top: 20px; font-size: 12px; color: rgba(255,255,255,0.6);">
+                Mobile viewer created as an independent project to enhance the One Typed Page experience.
+            </p>
         </div>
     </div>
 
@@ -869,15 +997,18 @@
             const header = document.getElementById('header');
             const navigation = document.getElementById('navigation');
             const viewToggle = document.getElementById('viewToggle');
+            const attribution = document.querySelector('.attribution');
             
             if (uiVisible) {
                 header.classList.remove('hidden');
                 navigation.classList.remove('hidden');
                 viewToggle.classList.remove('hidden');
+                attribution.style.opacity = '0.7';
             } else {
                 header.classList.add('hidden');
                 navigation.classList.add('hidden');
                 viewToggle.classList.add('hidden');
+                attribution.style.opacity = '0';
             }
         }
 
@@ -1423,6 +1554,7 @@
 
         function exportMarkdown() {
             let markdown = '# One Typed Page Collection\n\n';
+            markdown += '*Curated from [One Typed Page](https://onetypedpage.com/) by Daniel Marleau*\n\n';
             
             allPosts.forEach((post, dayIndex) => {
                 const today = new Date();
@@ -1457,12 +1589,64 @@
                 markdown += '---\n\n';
             });
 
+            markdown += '\n*Generated by One Typed Page Mobile Viewer*\n';
+            markdown += '*Visit [onetypedpage.com](https://onetypedpage.com/) to explore more daily pages*\n';
+
             document.getElementById('markdownContent').textContent = markdown;
             document.getElementById('markdownModal').classList.add('active');
         }
 
+        function copyMarkdown() {
+            const markdownContent = document.getElementById('markdownContent').textContent;
+            
+            navigator.clipboard.writeText(markdownContent).then(() => {
+                showNotification('✅ Markdown copied to clipboard!');
+            }).catch(() => {
+                // Fallback for older browsers
+                const textArea = document.createElement('textarea');
+                textArea.value = markdownContent;
+                document.body.appendChild(textArea);
+                textArea.select();
+                document.execCommand('copy');
+                document.body.removeChild(textArea);
+                showNotification('✅ Markdown copied to clipboard!');
+            });
+        }
+
+        function downloadMarkdown() {
+            const markdownContent = document.getElementById('markdownContent').textContent;
+            
+            const blob = new Blob([markdownContent], { type: 'text/markdown' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            
+            const today = new Date();
+            const filename = `one-typed-page-collection-${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}.md`;
+            
+            link.href = url;
+            link.download = filename;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+            
+            showNotification('💾 Markdown file downloaded!');
+        }
+
+        function showAttribution() {
+            document.getElementById('attributionModal').classList.add('active');
+        }
+
+        function closeAttribution() {
+            document.getElementById('attributionModal').classList.remove('active');
+        }
+
         function closeModal() {
             document.getElementById('markdownModal').classList.remove('active');
+        }
+
+        function closeAttribution() {
+            document.getElementById('attributionModal').classList.remove('active');
         }
 
         function showNotification(message) {
@@ -1549,8 +1733,8 @@
 
         // Initialize the app
         document.addEventListener('DOMContentLoaded', function() {
-            console.log('🚀 One Typed Page Mobile Viewer v5.2 - FIXED NAVIGATION & DOWNLOAD');
-            console.log('Features: Fixed day counting, proper image downloads, streamlined navigation');
+            console.log('🚀 One Typed Page Mobile Viewer v5.3 - COMPLETE FEATURE SET');
+            console.log('Features: Markdown export/download, Daniel Marleau attribution, fixed navigation & downloads');
             setupTouchEvents();
             loadPosts();
         });
@@ -1564,11 +1748,13 @@
             const header = document.getElementById('header');
             const navigation = document.getElementById('navigation');
             const viewToggle = document.getElementById('viewToggle');
+            const attribution = document.querySelector('.attribution');
             
             // Show UI
             header.classList.remove('hidden');
             navigation.classList.remove('hidden');
             viewToggle.classList.remove('hidden');
+            attribution.style.opacity = '0.7';
             
             hideTimeout = setTimeout(() => {
                 // Only auto-hide if in image view on mobile and UI is still supposed to be visible
@@ -1576,6 +1762,7 @@
                     header.classList.add('hidden');
                     navigation.classList.add('hidden');
                     viewToggle.classList.add('hidden');
+                    attribution.style.opacity = '0.3'; // Keep attribution slightly visible
                 }
             }, 4000);
         }
