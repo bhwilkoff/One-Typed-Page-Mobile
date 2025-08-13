@@ -562,6 +562,7 @@
                     }
                     
                     console.log(`\n=== Processing Post ${i + 1}: ${postTitle} ===`);
+                    console.log(`Post Date: ${postDate}`);
                     
                     // Extract images from this post
                     const extractedImages = [];
@@ -620,14 +621,29 @@
                         link: postLink,
                         description: postContent,
                         pubDate: postDate,
-                        dayIndex: i, // 0 = today, 1 = yesterday, etc.
+                        actualDate: new Date(postDate), // Store actual date object for sorting
+                        dayIndex: i, // RSS order index
                         images: deduplicatedImages.length > 0 ? deduplicatedImages : ['https://via.placeholder.com/600x800/333/fff?text=No+Images+Found']
                     };
                     
                     allPosts.push(postData);
                 }
                 
-                console.log(`\n✅ Loaded ${allPosts.length} posts total`);
+                // Sort posts by actual date (newest first) to ensure proper chronological order
+                allPosts.sort((a, b) => b.actualDate - a.actualDate);
+                
+                // Re-index after sorting to ensure proper day calculation
+                allPosts.forEach((post, index) => {
+                    post.dayIndex = index;
+                });
+                
+                console.log(`\n✅ Loaded ${allPosts.length} posts total, sorted by date`);
+                console.log('Post dates in order:');
+                allPosts.forEach((post, index) => {
+                    const today = new Date();
+                    const daysDiff = Math.floor((today - post.actualDate) / (1000 * 60 * 60 * 24));
+                    console.log(`${index}: ${post.title} - ${daysDiff} days ago (${post.actualDate.toDateString()})`);
+                });
                 
                 // Start with today's post
                 currentDayIndex = 0;
@@ -821,9 +837,13 @@
                 leftBtn.disabled = currentDayIndex === 0;
                 rightBtn.disabled = currentDayIndex >= allPosts.length - 1;
                 
-                // Calculate relative date
+                // Calculate relative date using actual post date
                 const today = new Date();
-                const postDate = new Date(currentPost.pubDate);
+                today.setHours(0, 0, 0, 0); // Reset to start of day for accurate comparison
+                
+                const postDate = new Date(currentPost.actualDate);
+                postDate.setHours(0, 0, 0, 0); // Reset to start of day for accurate comparison
+                
                 const daysDiff = Math.floor((today - postDate) / (1000 * 60 * 60 * 24));
                 
                 let dayText;
@@ -831,8 +851,11 @@
                     dayText = 'Today';
                 } else if (daysDiff === 1) {
                     dayText = 'Yesterday';
-                } else {
+                } else if (daysDiff > 1) {
                     dayText = `${daysDiff} Days Ago`;
+                } else {
+                    // Future date (shouldn't happen but just in case)
+                    dayText = 'Future';
                 }
                 
                 navIndicator.textContent = dayText;
@@ -1329,31 +1352,72 @@
             `;
         }
 
-        // Fixed download function for mobile
-        function downloadImage() {
-            if (allPosts.length > 0) {
-                const currentPost = allPosts[currentDayIndex];
-                const currentImage = currentPost.images[currentPageIndex];
+        // Fixed download function for mobile and desktop
+        async function downloadImage() {
+            if (allPosts.length === 0) {
+                showNotification('❌ No image available to download');
+                return;
+            }
+            
+            const currentPost = allPosts[currentDayIndex];
+            const currentImage = currentPost.images[currentPageIndex];
+            
+            if (!currentImage || currentImage.includes('placeholder')) {
+                showNotification('❌ No image available to download');
+                return;
+            }
+            
+            try {
+                showNotification('📥 Downloading image...');
                 
-                if (currentImage && !currentImage.includes('placeholder')) {
-                    // Create download link
-                    const link = document.createElement('a');
-                    link.href = currentImage;
-                    link.download = `one-typed-page-${currentDayIndex}-${currentPageIndex + 1}.jpg`;
-                    
-                    // For mobile devices, try to trigger actual download
-                    if (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) {
-                        // Mobile: Open in new tab and let user save manually
-                        window.open(currentImage, '_blank');
-                        showNotification('📱 Image opened in new tab. Use your browser\'s save option to download.');
-                    } else {
-                        // Desktop: Trigger download
-                        link.click();
-                        showNotification('💾 Image download started!');
-                    }
-                } else {
-                    showNotification('❌ No image available to download');
+                // Fetch the image as a blob
+                const response = await fetch(currentImage);
+                if (!response.ok) {
+                    throw new Error(`Failed to fetch image: ${response.status}`);
                 }
+                
+                const blob = await response.blob();
+                
+                // Create a blob URL
+                const blobUrl = URL.createObjectURL(blob);
+                
+                // Create filename
+                const today = new Date();
+                const postDate = new Date(currentPost.actualDate);
+                const daysDiff = Math.floor((today - postDate) / (1000 * 60 * 60 * 24));
+                
+                let filename;
+                if (daysDiff === 0) {
+                    filename = `one-typed-page-today-${currentPageIndex + 1}.jpg`;
+                } else if (daysDiff === 1) {
+                    filename = `one-typed-page-yesterday-${currentPageIndex + 1}.jpg`;
+                } else {
+                    filename = `one-typed-page-${daysDiff}-days-ago-${currentPageIndex + 1}.jpg`;
+                }
+                
+                // Create download link
+                const link = document.createElement('a');
+                link.href = blobUrl;
+                link.download = filename;
+                
+                // Append to body, click, and remove
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                
+                // Clean up the blob URL
+                setTimeout(() => {
+                    URL.revokeObjectURL(blobUrl);
+                }, 1000);
+                
+                showNotification('✅ Image saved successfully!');
+                
+            } catch (error) {
+                console.error('Download failed:', error);
+                
+                // Fallback: open in new tab
+                window.open(currentImage, '_blank');
+                showNotification('📱 Image opened in new tab. Use your browser\'s save option to download.');
             }
         }
 
@@ -1362,7 +1426,11 @@
             
             allPosts.forEach((post, dayIndex) => {
                 const today = new Date();
-                const postDate = new Date(post.pubDate);
+                today.setHours(0, 0, 0, 0);
+                
+                const postDate = new Date(post.actualDate);
+                postDate.setHours(0, 0, 0, 0);
+                
                 const daysDiff = Math.floor((today - postDate) / (1000 * 60 * 60 * 24));
                 
                 let dayText;
@@ -1370,12 +1438,14 @@
                     dayText = 'Today';
                 } else if (daysDiff === 1) {
                     dayText = 'Yesterday';
-                } else {
+                } else if (daysDiff > 1) {
                     dayText = `${daysDiff} Days Ago`;
+                } else {
+                    dayText = 'Future';
                 }
                 
                 markdown += `## ${dayText} - ${post.title}\n\n`;
-                markdown += `**Date:** ${new Date(post.pubDate).toLocaleDateString()}\n\n`;
+                markdown += `**Date:** ${post.actualDate.toLocaleDateString()}\n\n`;
                 markdown += `**Original Link:** [View Post](${post.link})\n\n`;
                 
                 post.images.forEach((image, imageIndex) => {
@@ -1417,12 +1487,19 @@
         // Sample data function
         window.loadSampleData = function() {
             console.log('Loading sample data for testing...');
+            const today = new Date();
+            const yesterday = new Date(today);
+            yesterday.setDate(yesterday.getDate() - 1);
+            const twoDaysAgo = new Date(today);
+            twoDaysAgo.setDate(twoDaysAgo.getDate() - 2);
+            
             allPosts = [
                 {
                     title: "Sample Post - Today",
                     link: "https://onetypedpage.com/sample1",
                     description: "Today's sample post",
-                    pubDate: new Date().toISOString(),
+                    pubDate: today.toISOString(),
+                    actualDate: today,
                     dayIndex: 0,
                     images: [
                         "https://via.placeholder.com/600x800/333/fff?text=Today+Page+1",
@@ -1433,10 +1510,22 @@
                     title: "Sample Post - Yesterday",
                     link: "https://onetypedpage.com/sample2", 
                     description: "Yesterday's sample post",
-                    pubDate: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
+                    pubDate: yesterday.toISOString(),
+                    actualDate: yesterday,
                     dayIndex: 1,
                     images: [
                         "https://via.placeholder.com/600x800/555/fff?text=Yesterday+Page+1"
+                    ]
+                },
+                {
+                    title: "Sample Post - 2 Days Ago",
+                    link: "https://onetypedpage.com/sample3", 
+                    description: "Sample post from 2 days ago",
+                    pubDate: twoDaysAgo.toISOString(),
+                    actualDate: twoDaysAgo,
+                    dayIndex: 2,
+                    images: [
+                        "https://via.placeholder.com/600x800/666/fff?text=2+Days+Ago+Page+1"
                     ]
                 }
             ];
@@ -1452,7 +1541,7 @@
             navigation.classList.remove('hidden');
             updateNavigation();
             
-            console.log('Sample data loaded!');
+            console.log('Sample data loaded with proper dates!');
         };
 
         // Make manual input function globally available
@@ -1460,8 +1549,8 @@
 
         // Initialize the app
         document.addEventListener('DOMContentLoaded', function() {
-            console.log('🚀 One Typed Page Mobile Viewer v5.1 - STREAMLINED NAVIGATION');
-            console.log('Features: Combined navigation, tap-to-hide UI, mobile-optimized interface');
+            console.log('🚀 One Typed Page Mobile Viewer v5.2 - FIXED NAVIGATION & DOWNLOAD');
+            console.log('Features: Fixed day counting, proper image downloads, streamlined navigation');
             setupTouchEvents();
             loadPosts();
         });
