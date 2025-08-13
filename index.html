@@ -168,24 +168,25 @@
             left: 50%;
             transform: translateX(-50%);
             display: flex;
-            gap: 10px;
+            align-items: center;
+            gap: 8px;
             z-index: 100;
-            background: rgba(0, 0, 0, 0.7);
-            padding: 10px;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 8px 12px;
             border-radius: 25px;
             backdrop-filter: blur(10px);
+            transition: opacity 0.3s ease, transform 0.3s ease;
         }
 
         .navigation.hidden {
             opacity: 0;
             pointer-events: none;
-            transition: opacity 0.3s ease;
         }
 
         .nav-btn {
-            width: 44px;
-            height: 44px;
-            border-radius: 22px;
+            width: 36px;
+            height: 36px;
+            border-radius: 18px;
             background: rgba(255, 255, 255, 0.2);
             border: none;
             color: #fff;
@@ -193,7 +194,7 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 18px;
+            font-size: 16px;
             transition: all 0.2s ease;
         }
 
@@ -206,17 +207,34 @@
             cursor: not-allowed;
         }
 
-        .page-indicator {
-            color: rgba(255, 255, 255, 0.8);
-            font-size: 12px;
-            padding: 0 10px;
+        .nav-info {
             display: flex;
+            flex-direction: column;
             align-items: center;
+            min-width: 100px;
+        }
+
+        .nav-mode-toggle {
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            color: #fff;
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 10px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            margin-bottom: 2px;
+        }
+
+        .nav-mode-toggle:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        .nav-indicator {
+            color: rgba(255, 255, 255, 0.9);
+            font-size: 11px;
             text-align: center;
-            max-width: 200px;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
+            font-weight: 500;
         }
 
         .view-toggle {
@@ -229,6 +247,12 @@
             padding: 5px;
             display: flex;
             backdrop-filter: blur(10px);
+            transition: opacity 0.3s ease;
+        }
+
+        .view-toggle.hidden {
+            opacity: 0;
+            pointer-events: none;
         }
 
         .toggle-btn {
@@ -247,61 +271,25 @@
             color: #fff;
         }
 
-        .day-navigation {
+        .hide-ui-hint {
             position: absolute;
-            bottom: 80px;
+            top: 50%;
             left: 50%;
-            transform: translateX(-50%);
-            display: flex;
-            gap: 10px;
-            z-index: 100;
+            transform: translate(-50%, -50%);
             background: rgba(0, 0, 0, 0.7);
-            padding: 10px;
-            border-radius: 25px;
+            color: rgba(255, 255, 255, 0.8);
+            padding: 8px 12px;
+            border-radius: 20px;
+            font-size: 12px;
             backdrop-filter: blur(10px);
-        }
-
-        .day-navigation.hidden {
             opacity: 0;
             pointer-events: none;
             transition: opacity 0.3s ease;
+            z-index: 50;
         }
 
-        .day-nav-btn {
-            width: 44px;
-            height: 44px;
-            border-radius: 22px;
-            background: rgba(255, 255, 255, 0.2);
-            border: none;
-            color: #fff;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 14px;
-            transition: all 0.2s ease;
-        }
-
-        .day-nav-btn:hover {
-            background: rgba(255, 255, 255, 0.3);
-        }
-
-        .day-nav-btn:disabled {
-            opacity: 0.3;
-            cursor: not-allowed;
-        }
-
-        .day-indicator {
-            color: rgba(255, 255, 255, 0.8);
-            font-size: 12px;
-            padding: 0 10px;
-            display: flex;
-            align-items: center;
-            text-align: center;
-            max-width: 150px;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
+        .hide-ui-hint.show {
+            opacity: 1;
         }
 
         .error-message {
@@ -414,16 +402,15 @@
                 <button class="toggle-btn" onclick="setView('text')">Text</button>
             </div>
 
-            <div class="day-navigation" id="dayNavigation">
-                <button class="day-nav-btn" onclick="previousDay()" id="prevDayBtn">‹</button>
-                <div class="day-indicator" id="dayIndicator">Today</div>
-                <button class="day-nav-btn" onclick="nextDay()" id="nextDayBtn">›</button>
-            </div>
+            <div class="hide-ui-hint" id="hideUIHint">Tap image to hide UI</div>
 
             <div class="navigation" id="navigation">
-                <button class="nav-btn" onclick="previousPost()" id="prevBtn">‹</button>
-                <div class="page-indicator" id="pageIndicator">Loading...</div>
-                <button class="nav-btn" onclick="nextPost()" id="nextBtn">›</button>
+                <button class="nav-btn" onclick="navigateLeft()" id="leftBtn">‹</button>
+                <div class="nav-info">
+                    <button class="nav-mode-toggle" onclick="toggleNavMode()" id="navModeToggle">PAGES</button>
+                    <div class="nav-indicator" id="navIndicator">Loading...</div>
+                </div>
+                <button class="nav-btn" onclick="navigateRight()" id="rightBtn">›</button>
             </div>
 
             <div class="loading" id="loading">
@@ -452,18 +439,18 @@
         let currentView = 'image';
         let isLoading = false;
         let ocrCache = new Map();
+        let navigationMode = 'pages'; // 'pages' or 'days'
+        let uiVisible = true;
 
         // === LOAD ALL POSTS FROM RSS FEED ===
         async function loadPosts() {
             console.log('🔥 Loading all posts from RSS feed');
             const loading = document.getElementById('loading');
             const navigation = document.getElementById('navigation');
-            const dayNavigation = document.getElementById('dayNavigation');
             
             try {
                 loading.style.display = 'block';
                 navigation.classList.add('hidden');
-                dayNavigation.classList.add('hidden');
                 
                 console.log('=== Starting RSS Feed Load ===');
                 const rssUrl = 'https://onetypedpage.com/feed/';
@@ -649,8 +636,8 @@
                 renderCurrentPost();
                 loading.style.display = 'none';
                 navigation.classList.remove('hidden');
-                dayNavigation.classList.remove('hidden');
                 updateNavigation();
+                showUIHint();
                 
             } catch (overallError) {
                 console.error('💥 Complete failure:', overallError);
@@ -681,6 +668,9 @@
                     </div>
                 </div>
             `;
+            
+            // Setup tap-to-hide functionality for the new image
+            setupImageTapToHide();
         }
 
         // Load RSS from manually pasted content
@@ -745,6 +735,27 @@
         }
 
         // Navigation functions
+        function navigateLeft() {
+            if (navigationMode === 'pages') {
+                previousPost();
+            } else {
+                nextDay(); // Note: "left" goes to more recent day (lower index)
+            }
+        }
+
+        function navigateRight() {
+            if (navigationMode === 'pages') {
+                nextPost();
+            } else {
+                previousDay(); // Note: "right" goes to older day (higher index)
+            }
+        }
+
+        function toggleNavMode() {
+            navigationMode = navigationMode === 'pages' ? 'days' : 'pages';
+            updateNavigation();
+        }
+
         function nextPost() {
             if (allPosts.length === 0) return;
             
@@ -783,46 +794,89 @@
         }
 
         function updateNavigation() {
-            const prevBtn = document.getElementById('prevBtn');
-            const nextBtn = document.getElementById('nextBtn');
-            const pageIndicator = document.getElementById('pageIndicator');
-            const prevDayBtn = document.getElementById('prevDayBtn');
-            const nextDayBtn = document.getElementById('nextDayBtn');
-            const dayIndicator = document.getElementById('dayIndicator');
+            const leftBtn = document.getElementById('leftBtn');
+            const rightBtn = document.getElementById('rightBtn');
+            const navIndicator = document.getElementById('navIndicator');
+            const navModeToggle = document.getElementById('navModeToggle');
 
             if (allPosts.length === 0) return;
 
             const currentPost = allPosts[currentDayIndex];
             
-            // Update page navigation
-            prevBtn.disabled = currentPageIndex === 0;
-            nextBtn.disabled = currentPageIndex >= currentPost.images.length - 1;
-            
-            if (currentPost.images.length > 1) {
-                pageIndicator.textContent = `Page ${currentPageIndex + 1} / ${currentPost.images.length}`;
+            if (navigationMode === 'pages') {
+                // Page navigation mode
+                leftBtn.disabled = currentPageIndex === 0;
+                rightBtn.disabled = currentPageIndex >= currentPost.images.length - 1;
+                
+                if (currentPost.images.length > 1) {
+                    navIndicator.textContent = `${currentPageIndex + 1} / ${currentPost.images.length}`;
+                } else {
+                    navIndicator.textContent = `1 / 1`;
+                }
+                
+                navModeToggle.textContent = 'PAGES';
+                
             } else {
-                pageIndicator.textContent = `1 / 1`;
+                // Day navigation mode
+                leftBtn.disabled = currentDayIndex === 0;
+                rightBtn.disabled = currentDayIndex >= allPosts.length - 1;
+                
+                // Calculate relative date
+                const today = new Date();
+                const postDate = new Date(currentPost.pubDate);
+                const daysDiff = Math.floor((today - postDate) / (1000 * 60 * 60 * 24));
+                
+                let dayText;
+                if (daysDiff === 0) {
+                    dayText = 'Today';
+                } else if (daysDiff === 1) {
+                    dayText = 'Yesterday';
+                } else {
+                    dayText = `${daysDiff} Days Ago`;
+                }
+                
+                navIndicator.textContent = dayText;
+                navModeToggle.textContent = 'DAYS';
             }
+        }
+
+        // UI visibility functions
+        function toggleUI() {
+            uiVisible = !uiVisible;
+            const header = document.getElementById('header');
+            const navigation = document.getElementById('navigation');
+            const viewToggle = document.getElementById('viewToggle');
             
-            // Update day navigation
-            prevDayBtn.disabled = currentDayIndex >= allPosts.length - 1;
-            nextDayBtn.disabled = currentDayIndex === 0;
-            
-            // Calculate relative date
-            const today = new Date();
-            const postDate = new Date(currentPost.pubDate);
-            const daysDiff = Math.floor((today - postDate) / (1000 * 60 * 60 * 24));
-            
-            let dayText;
-            if (daysDiff === 0) {
-                dayText = 'Today';
-            } else if (daysDiff === 1) {
-                dayText = 'Yesterday';
+            if (uiVisible) {
+                header.classList.remove('hidden');
+                navigation.classList.remove('hidden');
+                viewToggle.classList.remove('hidden');
             } else {
-                dayText = `${daysDiff} Days Ago`;
+                header.classList.add('hidden');
+                navigation.classList.add('hidden');
+                viewToggle.classList.add('hidden');
             }
-            
-            dayIndicator.textContent = dayText;
+        }
+
+        function showUIHint() {
+            const hint = document.getElementById('hideUIHint');
+            hint.classList.add('show');
+            setTimeout(() => {
+                hint.classList.remove('show');
+            }, 3000);
+        }
+
+        // Add tap-to-hide functionality to images
+        function setupImageTapToHide() {
+            const imageView = document.getElementById('imageView');
+            if (imageView) {
+                imageView.addEventListener('click', (e) => {
+                    // Only toggle UI if clicking directly on the image container, not OCR buttons etc.
+                    if (e.target === imageView || e.target.tagName === 'IMG') {
+                        toggleUI();
+                    }
+                });
+            }
         }
 
         // View toggle functions
@@ -852,16 +906,30 @@
             document.addEventListener('keydown', (e) => {
                 switch(e.key) {
                     case 'ArrowLeft':
-                        previousPost();
+                        if (navigationMode === 'pages') {
+                            previousPost();
+                        } else {
+                            nextDay();
+                        }
                         break;
                     case 'ArrowRight':
-                        nextPost();
+                        if (navigationMode === 'pages') {
+                            nextPost();
+                        } else {
+                            previousDay();
+                        }
                         break;
                     case 'ArrowUp':
-                        nextDay();
+                        navigationMode = 'days';
+                        updateNavigation();
                         break;
                     case 'ArrowDown':
-                        previousDay();
+                        navigationMode = 'pages';
+                        updateNavigation();
+                        break;
+                    case ' ':
+                        e.preventDefault();
+                        toggleUI();
                         break;
                 }
             });
@@ -1378,12 +1446,10 @@
             
             const loading = document.getElementById('loading');
             const navigation = document.getElementById('navigation');
-            const dayNavigation = document.getElementById('dayNavigation');
             
             renderCurrentPost();
             loading.style.display = 'none';
             navigation.classList.remove('hidden');
-            dayNavigation.classList.remove('hidden');
             updateNavigation();
             
             console.log('Sample data loaded!');
@@ -1394,8 +1460,8 @@
 
         // Initialize the app
         document.addEventListener('DOMContentLoaded', function() {
-            console.log('🚀 One Typed Page Mobile Viewer v5.0 - MOBILE OPTIMIZED');
-            console.log('Features: Multi-day navigation, mobile-friendly interface, native pinch-zoom');
+            console.log('🚀 One Typed Page Mobile Viewer v5.1 - STREAMLINED NAVIGATION');
+            console.log('Features: Combined navigation, tap-to-hide UI, mobile-optimized interface');
             setupTouchEvents();
             loadPosts();
         });
@@ -1403,21 +1469,24 @@
         // Hide UI on inactivity (mobile-friendly)
         let hideTimeout;
         function resetHideTimeout() {
+            if (!uiVisible) return; // Don't reset if UI is manually hidden
+            
             clearTimeout(hideTimeout);
             const header = document.getElementById('header');
             const navigation = document.getElementById('navigation');
-            const dayNavigation = document.getElementById('dayNavigation');
+            const viewToggle = document.getElementById('viewToggle');
             
+            // Show UI
             header.classList.remove('hidden');
             navigation.classList.remove('hidden');
-            dayNavigation.classList.remove('hidden');
+            viewToggle.classList.remove('hidden');
             
             hideTimeout = setTimeout(() => {
-                // Only hide if in image view on mobile
-                if (currentView === 'image' && window.innerWidth <= 768) {
+                // Only auto-hide if in image view on mobile and UI is still supposed to be visible
+                if (currentView === 'image' && window.innerWidth <= 768 && uiVisible) {
                     header.classList.add('hidden');
                     navigation.classList.add('hidden');
-                    dayNavigation.classList.add('hidden');
+                    viewToggle.classList.add('hidden');
                 }
             }, 4000);
         }
