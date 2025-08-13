@@ -1,0 +1,1799 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>One Typed Page - Mobile Reader</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/5.1.1/tesseract.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+            background: #000;
+            color: #fff;
+            overflow: hidden;
+            touch-action: manipulation;
+        }
+
+        .app-container {
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+        }
+
+        .header {
+            background: rgba(0, 0, 0, 0.9);
+            padding: 10px 15px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            position: relative;
+            z-index: 1000;
+        }
+
+        .header.hidden {
+            transform: translateY(-100%);
+            transition: transform 0.3s ease;
+        }
+
+        .logo {
+            font-size: 18px;
+            font-weight: bold;
+        }
+
+        .controls {
+            display: flex;
+            gap: 10px;
+        }
+
+        .btn {
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            color: #fff;
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .btn:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .main-content {
+            flex: 1;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .viewer {
+            width: 100%;
+            height: 100%;
+            position: relative;
+            display: flex;
+            transition: transform 0.3s ease;
+        }
+
+        .post-container {
+            width: 100%;
+            height: 100%;
+            flex-shrink: 0;
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .image-view {
+            width: 100%;
+            height: 100%;
+            position: relative;
+            overflow: hidden;
+            cursor: grab;
+        }
+
+        .image-view.grabbing {
+            cursor: grabbing;
+        }
+
+        .post-image {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            transition: transform 0.1s ease;
+            user-select: none;
+        }
+
+        .post-image.placeholder-image {
+            opacity: 0.7;
+            filter: grayscale(50%);
+        }
+
+        .text-view {
+            width: 100%;
+            height: 100%;
+            padding: 20px;
+            overflow-y: auto;
+            background: rgba(0, 0, 0, 0.8);
+            display: none;
+        }
+
+        .text-view.active {
+            display: block;
+        }
+
+        .text-content {
+            max-width: 600px;
+            margin: 0 auto;
+            line-height: 1.6;
+            font-size: 16px;
+        }
+
+        .loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+        }
+
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid rgba(255, 255, 255, 0.3);
+            border-top: 3px solid #fff;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 15px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .navigation {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 10px;
+            z-index: 100;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 10px;
+            border-radius: 25px;
+            backdrop-filter: blur(10px);
+        }
+
+        .navigation.hidden {
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s ease;
+        }
+
+        .nav-btn {
+            width: 44px;
+            height: 44px;
+            border-radius: 22px;
+            background: rgba(255, 255, 255, 0.2);
+            border: none;
+            color: #fff;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            transition: all 0.2s ease;
+        }
+
+        .nav-btn:hover {
+            background: rgba(255, 255, 255, 0.3);
+        }
+
+        .nav-btn:disabled {
+            opacity: 0.3;
+            cursor: not-allowed;
+        }
+
+        .page-indicator {
+            color: rgba(255, 255, 255, 0.8);
+            font-size: 12px;
+            padding: 0 10px;
+            display: flex;
+            align-items: center;
+            text-align: center;
+            max-width: 200px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .view-toggle {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            z-index: 100;
+            background: rgba(0, 0, 0, 0.7);
+            border-radius: 20px;
+            padding: 5px;
+            display: flex;
+            backdrop-filter: blur(10px);
+        }
+
+        .toggle-btn {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 15px;
+            background: transparent;
+            color: rgba(255, 255, 255, 0.7);
+            cursor: pointer;
+            transition: all 0.2s ease;
+            font-size: 14px;
+        }
+
+        .toggle-btn.active {
+            background: rgba(255, 255, 255, 0.2);
+            color: #fff;
+        }
+
+        .zoom-controls {
+            position: absolute;
+            bottom: 100px;
+            right: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            z-index: 100;
+        }
+
+        .zoom-btn {
+            width: 44px;
+            height: 44px;
+            border-radius: 22px;
+            background: rgba(0, 0, 0, 0.7);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            color: #fff;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            backdrop-filter: blur(10px);
+        }
+
+        .error-message {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            padding: 20px;
+            background: rgba(255, 0, 0, 0.1);
+            border: 1px solid rgba(255, 0, 0, 0.3);
+            border-radius: 10px;
+            max-width: 80%;
+        }
+
+        .modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.9);
+            z-index: 2000;
+            display: none;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal.active {
+            display: flex;
+        }
+
+        .modal-content {
+            background: rgba(20, 20, 20, 0.95);
+            padding: 20px;
+            border-radius: 10px;
+            max-width: 90%;
+            max-height: 90%;
+            overflow-y: auto;
+            backdrop-filter: blur(20px);
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .close-btn {
+            background: none;
+            border: none;
+            color: #fff;
+            font-size: 24px;
+            cursor: pointer;
+        }
+
+        .markdown-content {
+            font-family: monospace;
+            font-size: 14px;
+            line-height: 1.5;
+            white-space: pre-wrap;
+            max-height: 70vh;
+            overflow-y: auto;
+        }
+
+        /* Touch-friendly improvements */
+        @media (max-width: 768px) {
+            .header {
+                padding: 8px 12px;
+            }
+            
+            .logo {
+                font-size: 16px;
+            }
+            
+            .btn {
+                padding: 6px 10px;
+                font-size: 12px;
+            }
+            
+            .text-view {
+                padding: 15px;
+            }
+            
+            .text-content {
+                font-size: 14px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="app-container">
+        <header class="header" id="header">
+            <div class="logo">One Typed Page</div>
+            <div class="controls">
+                <button class="btn" onclick="refreshData()" id="refreshBtn">Refresh</button>
+                <button class="btn" onclick="window.debugRSSFeed()" id="debugBtn">Debug</button>
+                <button class="btn" onclick="toggleFullscreen()">⛶</button>
+                <button class="btn" onclick="downloadImage()">⬇</button>
+                <button class="btn" onclick="exportMarkdown()">MD</button>
+            </div>
+        </header>
+
+        <main class="main-content">
+            <div class="viewer" id="viewer">
+                <!-- Posts will be dynamically loaded here -->
+            </div>
+
+            <div class="view-toggle" id="viewToggle">
+                <button class="toggle-btn active" onclick="setView('image')">Image</button>
+                <button class="toggle-btn" onclick="setView('text')">Text</button>
+            </div>
+
+            <div class="zoom-controls" id="zoomControls">
+                <button class="zoom-btn" onclick="zoomIn()">+</button>
+                <button class="zoom-btn" onclick="zoomOut()">−</button>
+                <button class="zoom-btn" onclick="resetZoom()">⌂</button>
+            </div>
+
+            <div class="navigation" id="navigation">
+                <button class="nav-btn" onclick="previousPost()" id="prevBtn">‹</button>
+                <div class="page-indicator" id="pageIndicator">Loading...</div>
+                <button class="nav-btn" onclick="nextPost()" id="nextBtn">›</button>
+            </div>
+
+            <div class="loading" id="loading">
+                <div class="spinner"></div>
+                <div>Loading One Typed Page posts...</div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Markdown Export Modal -->
+    <div class="modal" id="markdownModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Markdown Export</h3>
+                <button class="close-btn" onclick="closeModal()">&times;</button>
+            </div>
+            <div class="markdown-content" id="markdownContent"></div>
+        </div>
+    </div>
+
+    <script>
+        // Global state
+        let posts = [];
+        let currentIndex = 0;
+        let currentView = 'image';
+        let currentZoom = 1;
+        let isLoading = false;
+        let touchStartX = 0;
+        let touchStartY = 0;
+        let ocrCache = new Map();
+
+        // === NEW v3.0 LOAD POSTS FUNCTION - COMPLETELY REWRITTEN ===
+        async function loadPosts() {
+            console.log('🔥 v3.0 NEW loadPosts() function running');
+            const loading = document.getElementById('loading');
+            const navigation = document.getElementById('navigation');
+            
+            try {
+                loading.style.display = 'block';
+                navigation.classList.add('hidden');
+                
+                console.log('=== Starting RSS Feed Load v3.0 ===');
+                const rssUrl = 'https://onetypedpage.com/feed/';
+                
+                // v3.0 PROXY LIST - FIXED with working proxy first
+                const corsProxyList = [
+                    'https://corsproxy.io/?',  // This one was working before!
+                    'https://api.allorigins.win/raw?url=',  // This one worked too
+                    'https://corsproxy.org/?',
+                    'https://cors.bridged.cc/',
+                    'https://api.codetabs.com/v1/proxy?quest=',
+                    'https://cors-fix.vercel.app/api/cors?url=',
+                    'https://thingproxy.freeboard.io/fetch/',
+                    'https://api.allorigins.win/get?url=',
+                    'https://crossorigin.me/'
+                ];
+                
+                let successfulResponse = null;
+                let finalError = null;
+                
+                // Test each proxy service v3.0
+                for (let i = 0; i < corsProxyList.length; i++) {
+                    const proxyUrl = corsProxyList[i];
+                    console.log(`\n[v3.0] [${i + 1}/${corsProxyList.length}] Testing: ${proxyUrl}`);
+                    
+                    try {
+                        const fullUrl = proxyUrl + encodeURIComponent(rssUrl);
+                        console.log('Full request URL:', fullUrl);
+                        
+                        const fetchResponse = await fetch(fullUrl, {
+                            method: 'GET',
+                            headers: {
+                                'User-Agent': 'Mozilla/5.0 (compatible; RSS Reader v3.0)',
+                                'Accept': 'application/rss+xml, application/xml, text/xml, */*'
+                            }
+                        });
+                        
+                        console.log(`Response: ${fetchResponse.status} ${fetchResponse.statusText}`);
+                        
+                        if (fetchResponse.ok) {
+                            let textContent;
+                            
+                            // Handle different proxy response formats
+                            if (proxyUrl.includes('allorigins.win/get')) {
+                                const jsonResponse = await fetchResponse.json();
+                                textContent = jsonResponse.contents;
+                                console.log('Got JSON response, extracted contents');
+                            } else if (proxyUrl.includes('allorigins.win/raw')) {
+                                textContent = await fetchResponse.text();
+                                console.log('Got raw text response');
+                            } else {
+                                textContent = await fetchResponse.text();
+                                console.log('Got text response');
+                            }
+                            
+                            console.log(`Content length: ${textContent.length} characters`);
+                            console.log('Content preview:', textContent.substring(0, 200));
+                            
+                            if (textContent.includes('<?xml') || textContent.includes('<rss') || textContent.includes('<feed')) {
+                                console.log('✅ Valid RSS/XML content detected!');
+                                successfulResponse = textContent;
+                                break;
+                            } else {
+                                console.log('❌ Not valid RSS content');
+                            }
+                        }
+                    } catch (fetchError) {
+                        console.log(`❌ Proxy failed: ${fetchError.message}`);
+                        finalError = fetchError;
+                    }
+                }
+                
+                // If no proxy worked, show manual input
+                if (!successfulResponse) {
+                    console.log('🔧 All proxies failed - showing manual input option');
+                    showManualInput();
+                    loading.style.display = 'none';
+                    return;
+                }
+                
+                // Parse the successful RSS response
+                console.log('\n=== Parsing RSS Content v3.0 ===');
+                const xmlParser = new DOMParser();
+                const rssDocument = xmlParser.parseFromString(successfulResponse, 'text/xml');
+                
+                // Check for parsing errors
+                const parserError = rssDocument.querySelector('parsererror');
+                if (parserError) {
+                    throw new Error('XML Parser Error: ' + parserError.textContent);
+                }
+                
+                // Find RSS items
+                const rssItems = rssDocument.querySelectorAll('item');
+                console.log(`Found ${rssItems.length} RSS items`);
+                
+                if (rssItems.length === 0) {
+                    throw new Error('No RSS items found in feed');
+                }
+                
+                // Process ONLY the most recent post (first item) - v3.0
+                const latestPost = rssItems[0];
+                const postTitle = latestPost.querySelector('title')?.textContent || 'Latest Post';
+                const postLink = latestPost.querySelector('link')?.textContent || '';
+                
+                // Try multiple content fields - WordPress RSS can store content in different places
+                let postContent = '';
+                const contentSources = [
+                    latestPost.querySelector('description')?.textContent || '',
+                    latestPost.querySelector('content\\:encoded')?.textContent || '',
+                    latestPost.querySelector('content')?.textContent || '',
+                    latestPost.querySelector('summary')?.textContent || '',
+                    latestPost.innerHTML || ''  // fallback to raw XML
+                ];
+                
+                // Use the first non-empty content source
+                for (const source of contentSources) {
+                    if (source && source.trim().length > 0) {
+                        postContent = source;
+                        break;
+                    }
+                }
+                
+                const postDate = latestPost.querySelector('pubDate')?.textContent || '';
+                
+                console.log(`\n=== Processing Latest Post v3.0 ===`);
+                console.log('Title:', postTitle);
+                console.log('Link:', postLink);
+                console.log('Content length:', postContent.length);
+                console.log('Content source fields lengths:', contentSources.map(s => s.length));
+                console.log('First 500 chars of content:', postContent.substring(0, 500));
+                
+                // Debug: Show the actual XML structure
+                console.log('\n=== Raw RSS Item Structure v3.0 ===');
+                console.log('RSS Item HTML:', latestPost.outerHTML.substring(0, 1000));
+                
+                // Extract ALL images from this single post
+                const extractedImages = [];
+                
+                // Enhanced image detection patterns
+                const imagePatterns = [
+                    // Standard img tag with src
+                    /<img[^>]+src=["']([^"']+)["']/gi,
+                    // Any src attribute with image extension  
+                    /src=["']([^"']+\.(?:jpg|jpeg|png|gif|webp))["']/gi,
+                    // Direct image URLs in content
+                    /https?:\/\/[^"\s<>]+\.(?:jpg|jpeg|png|gif|webp)/gi,
+                    // WordPress attachment URLs
+                    /https?:\/\/[^"\s<>]+\/wp-content\/uploads\/[^"\s<>]*\.(?:jpg|jpeg|png|gif|webp)/gi,
+                    // WordPress media URLs with parameters
+                    /https?:\/\/[^"\s<>]*\.(?:jpg|jpeg|png|gif|webp)\?[^"\s<>]*/gi,
+                    // Base64 encoded images
+                    /data:image\/[^;]+;base64,[^"\s<>]+/gi
+                ];
+                
+                console.log('\n=== Extracting Images v3.0 ===');
+                for (let patternIndex = 0; patternIndex < imagePatterns.length; patternIndex++) {
+                    const pattern = imagePatterns[patternIndex];
+                    const matches = [...postContent.matchAll(pattern)];
+                    
+                    console.log(`Pattern ${patternIndex + 1}: ${pattern.toString()} found ${matches.length} matches`);
+                    
+                    matches.forEach((match, matchIndex) => {
+                        let imageUrl = match[1] || match[0];
+                        imageUrl = imageUrl.replace(/^["'(]+|["')]+$/g, '').trim();
+                        
+                        if (imageUrl && !extractedImages.includes(imageUrl)) {
+                            extractedImages.push(imageUrl);
+                            console.log(`  Match ${matchIndex + 1}: ${imageUrl}`);
+                        }
+                    });
+                }
+                
+                // Also check for media elements in the RSS XML
+                console.log('\n=== Checking RSS Media Elements v3.0 ===');
+                const mediaElements = latestPost.querySelectorAll('media\\:content, media\\:thumbnail, enclosure');
+                console.log(`Found ${mediaElements.length} media elements`);
+                
+                mediaElements.forEach((element, index) => {
+                    const url = element.getAttribute('url') || element.getAttribute('href');
+                    const type = element.getAttribute('type') || '';
+                    console.log(`Media ${index + 1}: ${element.tagName} - URL: ${url} - Type: ${type}`);
+                    
+                    if (url && (type.includes('image') || url.match(/\.(jpg|jpeg|png|gif|webp)/i))) {
+                        if (!extractedImages.includes(url)) {
+                            extractedImages.push(url);
+                            console.log(`  Added media URL: ${url}`);
+                        }
+                    }
+                });
+                
+                // Check for WordPress specific elements
+                console.log('\n=== Checking WordPress Elements v3.0 ===');
+                const wpElements = latestPost.querySelectorAll('wp\\:attachment_url, wp\\:meta_value');
+                wpElements.forEach((element, index) => {
+                    const content = element.textContent;
+                    console.log(`WP Element ${index + 1}: ${element.tagName} = ${content}`);
+                    
+                    if (content && content.match(/\.(jpg|jpeg|png|gif|webp)/i)) {
+                        if (!extractedImages.includes(content)) {
+                            extractedImages.push(content);
+                            console.log(`  Added WP URL: ${content}`);
+                        }
+                    }
+                });
+                
+                console.log(`\nRaw images found: ${extractedImages.length}`);
+                
+                // DEDUPLICATE IMAGES - Remove different sizes of the same image
+                console.log('\n=== Deduplicating Images v3.1 ===');
+                const deduplicatedImages = [];
+                const imageGroups = new Map(); // Group by base filename
+                
+                extractedImages.forEach((url, index) => {
+                    console.log(`Processing image ${index + 1}: ${url}`);
+                    
+                    // Extract base filename without size indicators
+                    let baseFilename = url.split('/').pop(); // Get filename
+                    baseFilename = baseFilename.split('?')[0]; // Remove query params
+                    
+                    // Remove common WordPress size suffixes like -150x150, -300x300, -1024x768, etc.
+                    baseFilename = baseFilename.replace(/-\d+x\d+/, '');
+                    baseFilename = baseFilename.replace(/-scaled/, '');
+                    baseFilename = baseFilename.replace(/-rotated/, '');
+                    
+                    console.log(`  Base filename: ${baseFilename}`);
+                    
+                    if (!imageGroups.has(baseFilename)) {
+                        imageGroups.set(baseFilename, []);
+                    }
+                    imageGroups.get(baseFilename).push({
+                        url: url,
+                        originalIndex: index
+                    });
+                });
+                
+                console.log(`\nFound ${imageGroups.size} unique image groups`);
+                
+                // For each group, pick the best version (prefer larger/original)
+                imageGroups.forEach((versions, baseFilename) => {
+                    console.log(`\nGroup "${baseFilename}" has ${versions.length} versions:`);
+                    versions.forEach((version, i) => {
+                        console.log(`  ${i + 1}: ${version.url}`);
+                    });
+                    
+                    // Pick the best version using priority rules
+                    let bestVersion = versions[0];
+                    
+                    for (const version of versions) {
+                        const url = version.url;
+                        
+                        // Prefer URLs without size indicators (likely original)
+                        if (!url.match(/-\d+x\d+/) && bestVersion.url.match(/-\d+x\d+/)) {
+                            bestVersion = version;
+                            console.log(`    → Chose original (no size): ${url}`);
+                            continue;
+                        }
+                        
+                        // Prefer larger dimensions
+                        const currentSize = url.match(/-(\d+)x(\d+)/);
+                        const bestSize = bestVersion.url.match(/-(\d+)x(\d+)/);
+                        
+                        if (currentSize && bestSize) {
+                            const currentArea = parseInt(currentSize[1]) * parseInt(currentSize[2]);
+                            const bestArea = parseInt(bestSize[1]) * parseInt(bestSize[2]);
+                            
+                            if (currentArea > bestArea) {
+                                bestVersion = version;
+                                console.log(`    → Chose larger size: ${url} (${currentArea} vs ${bestArea})`);
+                            }
+                        }
+                        
+                        // Prefer non-thumbnail versions
+                        if (bestVersion.url.includes('thumbnail') && !url.includes('thumbnail')) {
+                            bestVersion = version;
+                            console.log(`    → Chose non-thumbnail: ${url}`);
+                        }
+                    }
+                    
+                    deduplicatedImages.push(bestVersion.url);
+                    console.log(`  ✅ Selected: ${bestVersion.url}`);
+                });
+                
+                console.log(`\nFinal deduplicated images: ${deduplicatedImages.length}`);
+                deduplicatedImages.forEach((url, i) => {
+                    console.log(`Final ${i + 1}: ${url}`);
+                });
+                
+                // Use deduplicated images
+                const finalImages = deduplicatedImages;
+                
+                // If still no images found, show debug placeholder with the actual content
+                if (finalImages.length === 0) {
+                    console.log('No images found - creating debug post with content analysis');
+                    finalImages.push('https://via.placeholder.com/600x800/ff6b6b/fff?text=No+Images+Found');
+                    
+                    // Also create a debug post to show what we actually got
+                    posts = [{
+                        title: `DEBUG: ${postTitle}`,
+                        link: postLink,
+                        description: postContent,
+                        imageUrl: 'https://via.placeholder.com/600x800/ff6b6b/fff?text=No+Images+Found+in+RSS+Feed',
+                        pubDate: postDate,
+                        ocrText: '',
+                        isFromSamePost: false,
+                        originalTitle: postTitle,
+                        pageNumber: 1,
+                        totalPages: 1
+                    }];
+                } else {
+                    // Create image pages for navigation using deduplicated images
+                    posts = finalImages.map((imageUrl, index) => ({
+                        title: `${postTitle} - Page ${index + 1}`,
+                        link: postLink,
+                        description: postContent,
+                        imageUrl: imageUrl,
+                        pubDate: postDate,
+                        ocrText: '',
+                        isFromSamePost: true,
+                        originalTitle: postTitle,
+                        pageNumber: index + 1,
+                        totalPages: finalImages.length
+                    }));
+                }
+                
+                console.log(`\n✅ Created ${posts.length} pages for latest post (from ${finalImages.length} deduplicated images)`);
+                console.log('📱 Ready to display on mobile interface!');
+                
+                // Render and show results
+                renderPosts();
+                loading.style.display = 'none';
+                navigation.classList.remove('hidden');
+                updateNavigation();
+                
+            } catch (overallError) {
+                console.error('💥 Complete failure:', overallError);
+                showError(`Failed to load RSS feed: ${overallError.message}\n\nTry the manual input option below.`);
+                loading.style.display = 'none';
+            }
+        }
+
+        // Show manual RSS input when all proxies fail
+        function showManualInput() {
+            const viewer = document.getElementById('viewer');
+            viewer.innerHTML = `
+                <div class="error-message">
+                    <h3>🔧 Manual RSS Input</h3>
+                    <p>All CORS proxies failed. Please paste the RSS feed content manually:</p>
+                    <ol style="text-align: left; margin: 15px 0;">
+                        <li>Visit <a href="https://onetypedpage.com/feed/" target="_blank" style="color: #66c0f4;">https://onetypedpage.com/feed/</a></li>
+                        <li>Copy all the XML content (Ctrl+A, Ctrl+C)</li>
+                        <li>Paste it in the text area below</li>
+                        <li>Click "Load from Pasted Content"</li>
+                    </ol>
+                    <textarea id="manualRSSInput" placeholder="Paste RSS XML content here..." 
+                              style="width: 100%; height: 200px; background: rgba(255,255,255,0.1); color: #fff; border: 1px solid rgba(255,255,255,0.3); border-radius: 5px; padding: 10px; font-family: monospace; font-size: 12px; resize: vertical;"></textarea>
+                    <div style="margin-top: 15px; display: flex; gap: 10px; flex-wrap: wrap; justify-content: center;">
+                        <button class="btn" onclick="loadFromManualInput()">Load from Pasted Content</button>
+                        <button class="btn" onclick="window.loadSampleData()">Load Sample Data Instead</button>
+                        <button class="btn" onclick="refreshData()">Try Auto-Load Again</button>
+                    </div>
+                </div>
+            `;
+        }
+
+        // Load RSS from manually pasted content
+        function loadFromManualInput() {
+            const manualInput = document.getElementById('manualRSSInput');
+            const content = manualInput.value.trim();
+            
+            if (!content) {
+                alert('Please paste RSS content first');
+                return;
+            }
+            
+            try {
+                const parser = new DOMParser();
+                const xmlDoc = parser.parseFromString(content, 'text/xml');
+                
+                // Check for XML parsing errors
+                const parseError = xmlDoc.querySelector('parsererror');
+                if (parseError) {
+                    throw new Error('XML parsing error: ' + parseError.textContent);
+                }
+                
+                // Parse the manually input RSS
+                const items = xmlDoc.querySelectorAll('item');
+                console.log(`Found ${items.length} RSS items in manual input`);
+                
+                if (items.length === 0) {
+                    throw new Error('No RSS items found in the pasted content');
+                }
+                
+                // Get the most recent post (first item)
+                const mostRecentItem = items[0];
+                const title = mostRecentItem.querySelector('title')?.textContent || 'Latest Post';
+                const link = mostRecentItem.querySelector('link')?.textContent || '';
+                const description = mostRecentItem.querySelector('description')?.textContent || 
+                                 mostRecentItem.querySelector('content\\:encoded')?.textContent || '';
+                const pubDate = mostRecentItem.querySelector('pubDate')?.textContent || '';
+                
+                console.log(`Processing most recent post: ${title}`);
+                
+                // Extract ALL images from the most recent post
+                const imageUrls = [];
+                
+                const imgRegexes = [
+                    /<img[^>]+src=["']([^"']+)["']/gi,
+                    /src=["']([^"']+\.(?:jpg|jpeg|png|gif|webp))["']/gi,
+                    /https?:\/\/[^"\s<>]+\.(?:jpg|jpeg|png|gif|webp)/gi,
+                    /https?:\/\/[^"\s<>]+\/wp-content\/uploads\/[^"\s<>]+\.(?:jpg|jpeg|png|gif|webp)/gi,
+                    /https?:\/\/[^"\s<>]+\.(?:jpg|jpeg|png|gif|webp)\?[^"\s<>]*/gi
+                ];
+                
+                for (const regex of imgRegexes) {
+                    const matches = [...description.matchAll(regex)];
+                    matches.forEach(match => {
+                        let url = match[1] || match[0];
+                        url = url.replace(/^["'(]+|["')]+$/g, '');
+                        if (url && !imageUrls.includes(url)) {
+                            imageUrls.push(url);
+                        }
+                    });
+                }
+                
+                console.log(`Found ${imageUrls.length} images in most recent post:`, imageUrls);
+                
+                if (imageUrls.length === 0) {
+                    throw new Error('No images found in the most recent post');
+                }
+                
+                // Create individual "posts" for each image in the most recent post
+                posts = imageUrls.map((imageUrl, index) => ({
+                    title: `${title} - Page ${index + 1}`,
+                    link: link,
+                    description: description,
+                    imageUrl: imageUrl,
+                    pubDate: pubDate,
+                    ocrText: '',
+                    isFromSamePost: true,
+                    originalTitle: title,
+                    pageNumber: index + 1,
+                    totalPages: imageUrls.length
+                }));
+                
+                console.log(`Created ${posts.length} image pages from most recent post`);
+                
+                const loading = document.getElementById('loading');
+                const navigation = document.getElementById('navigation');
+                
+                renderPosts();
+                loading.style.display = 'none';
+                navigation.classList.remove('hidden');
+                updateNavigation();
+                
+            } catch (error) {
+                console.error('Error parsing manual RSS input:', error);
+                alert('Error parsing RSS content: ' + error.message);
+            }
+        }
+
+        // Render posts in the viewer
+        function renderPosts() {
+            const viewer = document.getElementById('viewer');
+            viewer.innerHTML = '';
+
+            posts.forEach((post, index) => {
+                const postContainer = document.createElement('div');
+                postContainer.className = 'post-container';
+                
+                const hasRealImage = post.imageUrl && !post.imageUrl.includes('placeholder');
+                const imageClass = hasRealImage ? 'post-image' : 'post-image placeholder-image';
+                
+                postContainer.innerHTML = `
+                    <div class="image-view" id="imageView${index}">
+                        ${!hasRealImage ? '<div style="position: absolute; top: 10px; left: 10px; background: rgba(255,0,0,0.7); color: white; padding: 5px 10px; border-radius: 5px; font-size: 12px; z-index: 10;">No Image Found - Debug Mode</div>' : ''}
+                        <img class="${imageClass}" 
+                             src="${post.imageUrl}" 
+                             alt="${post.title}"
+                             onload="imageLoaded(${index})"
+                             onerror="imageError(${index})">
+                    </div>
+                    <div class="text-view" id="textView${index}">
+                        <div class="text-content">
+                            <h2>${post.isFromSamePost ? `${post.originalTitle}` : post.title}</h2>
+                            ${post.isFromSamePost ? `<h3 style="color: rgba(255,255,255,0.7); margin-top: 5px;">Page ${post.pageNumber} of ${post.totalPages}</h3>` : ''}
+                            <p><small>${new Date(post.pubDate).toLocaleDateString()}</small></p>
+                            <p><a href="${post.link}" target="_blank" style="color: #66c0f4;">View Original Post</a></p>
+                            <hr style="margin: 20px 0; border: 1px solid rgba(255,255,255,0.2);">
+                            ${!hasRealImage ? '<p style="background: rgba(255,0,0,0.1); padding: 10px; border-radius: 5px; margin-bottom: 15px;"><strong>Debug Info:</strong> No image was found in this RSS item. This helps us understand the feed structure.</p>' : ''}
+                            <div id="ocrContent${index}">
+                                <p><em>Click "Extract Text" to perform OCR on this image...</em></p>
+                                <button class="btn" onclick="performOCR(${index})" style="margin-top: 10px;">Extract Text</button>
+                            </div>
+                            ${post.isFromSamePost ? '' : `
+                            <details style="margin-top: 20px;">
+                                <summary style="cursor: pointer; color: rgba(255,255,255,0.7);">Show Raw Content (Debug)</summary>
+                                <pre style="white-space: pre-wrap; font-size: 12px; background: rgba(255,255,255,0.05); padding: 10px; border-radius: 5px; margin-top: 10px; max-height: 200px; overflow-y: auto;">${post.description.substring(0, 1000)}${post.description.length > 1000 ? '...' : ''}</pre>
+                            </details>
+                            `}
+                        </div>
+                    </div>
+                `;
+                viewer.appendChild(postContainer);
+            });
+
+            // Position viewer to show current post
+            updateViewerPosition();
+        }
+
+        // Update viewer position based on current index
+        function updateViewerPosition() {
+            const viewer = document.getElementById('viewer');
+            viewer.style.transform = `translateX(-${currentIndex * 100}%)`;
+        }
+
+        // Image loading handlers
+        function imageLoaded(index) {
+            console.log(`Image ${index} loaded successfully`);
+        }
+
+        function imageError(index) {
+            console.error(`Failed to load image ${index}`);
+            const imageView = document.getElementById(`imageView${index}`);
+            imageView.innerHTML = '<div class="error-message">Failed to load image</div>';
+        }
+
+        // === GENUINELY DIFFERENT OCR APPROACHES ===
+        async function performOCR(index) {
+            if (ocrCache.has(index)) {
+                ocrCache.delete(index);
+            }
+
+            const ocrContent = document.getElementById(`ocrContent${index}`);
+            ocrContent.innerHTML = `
+                <div style="background: rgba(255,255,255,0.05); padding: 15px; border-radius: 8px; margin-top: 15px;">
+                    <h4>🔍 OCR Text Extraction Methods</h4>
+                    <p style="margin: 10px 0;">Choose a fundamentally different OCR approach:</p>
+                    
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 15px 0;">
+                        <button class="btn" onclick="runLegacyOCR(${index})" style="padding: 10px; font-size: 12px;">
+                            🏛️ Legacy Engine<br>
+                            <small style="opacity: 0.7;">Traditional character recognition</small>
+                        </button>
+                        <button class="btn" onclick="runNeuralOCR(${index})" style="padding: 10px; font-size: 12px;">
+                            🧠 Neural LSTM<br>
+                            <small style="opacity: 0.7;">Modern AI-based recognition</small>
+                        </button>
+                        <button class="btn" onclick="runPreprocessedOCR(${index})" style="padding: 10px; font-size: 12px;">
+                            🔧 Enhanced Image<br>
+                            <small style="opacity: 0.7;">Pre-processed or enhanced settings</small>
+                        </button>
+                        <button class="btn" onclick="runRestrictedOCR(${index})" style="padding: 10px; font-size: 12px;">
+                            🎯 Character-Limited<br>
+                            <small style="opacity: 0.7;">Strict character whitelist</small>
+                        </button>
+                    </div>
+                    
+                    <div style="margin-top: 15px;">
+                        <button class="btn" onclick="showCloudOCROptions(${index})" style="background: rgba(0,150,255,0.3);">
+                            ☁️ Use Cloud OCR (Most Accurate)
+                        </button>
+                    </div>
+                    
+                    <div style="margin-top: 10px; padding: 10px; background: rgba(255,165,0,0.1); border-radius: 5px; font-size: 12px;">
+                        💡 <strong>Tip:</strong> Each method uses a different approach to prevent character artifacts. Try Neural LSTM first for typewritten text!
+                    </div>
+                </div>
+            `;
+        }
+
+        // Method 1: Legacy OCR Engine - Old-school character recognition
+        async function runLegacyOCR(index) {
+            await runOCRWithMethod(index, 'Legacy Engine', {
+                logger: createProgressLogger(index, 'Legacy Engine'),
+                recognize: async (img) => {
+                    // Use the legacy Tesseract engine with basic settings
+                    return await Tesseract.recognize(img, 'eng', {
+                        tessedit_ocr_engine_mode: 0, // Legacy engine only
+                        tessedit_pageseg_mode: 6, // Single uniform block
+                        preserve_interword_spaces: 1,
+                        // Restrict problematic characters that cause artifacts
+                        tessedit_char_blacklist: 'Il|', // Blacklist common problem characters
+                        textord_min_linesize: 1.25,
+                        // Use confidence thresholds to reject poor character recognition
+                        tessedit_reject_mode: 2,
+                        classify_bln_numeric_mode: 1
+                    });
+                }
+            });
+        }
+
+        // Method 2: Neural LSTM Engine - Modern AI approach
+        async function runNeuralOCR(index) {
+            await runOCRWithMethod(index, 'Neural LSTM', {
+                logger: createProgressLogger(index, 'Neural LSTM'),
+                recognize: async (img) => {
+                    // Use neural network engine with strict character control
+                    return await Tesseract.recognize(img, 'eng', {
+                        tessedit_ocr_engine_mode: 1, // Neural nets LSTM engine only
+                        tessedit_pageseg_mode: 3, // Fully automatic page segmentation
+                        preserve_interword_spaces: 1,
+                        // Very strict whitelist - only allow common document characters
+                        tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.,!?;:\'\"()[]{}/-_@#$%^&*+=<>~ \n\t',
+                        // Prevent single character artifacts
+                        tessedit_reject_mode: 5,
+                        classify_bln_numeric_mode: 1,
+                        // Improve word recognition
+                        textord_tabfind_find_tables: 1
+                    });
+                }
+            });
+        }
+
+        // Method 3: Preprocessed Image OCR - Enhance image before OCR
+        async function runPreprocessedOCR(index) {
+            await runOCRWithMethod(index, 'Enhanced Image', {
+                logger: createProgressLogger(index, 'Enhanced Image'),
+                recognize: async (img) => {
+                    try {
+                        // First, preprocess the image to improve OCR quality
+                        const preprocessedImage = await preprocessImage(img);
+                        
+                        return await Tesseract.recognize(preprocessedImage, 'eng', {
+                            tessedit_ocr_engine_mode: 1, // LSTM
+                            tessedit_pageseg_mode: 6, // Single block
+                            preserve_interword_spaces: 1,
+                            // More aggressive character filtering since image is cleaner
+                            tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.,!?;:\'\"()[]{}/-_@#$%^&*+=<>~ \n\t',
+                            // Higher confidence thresholds
+                            tessedit_reject_mode: 5,
+                            // Better word context
+                            load_system_dawg: 1,
+                            load_freq_dawg: 1,
+                            textord_debug_tabfind: 0
+                        });
+                    } catch (corsError) {
+                        // If CORS preprocessing fails, fall back to direct OCR with enhanced settings
+                        console.log('Image preprocessing failed due to CORS restrictions. Using enhanced Tesseract settings instead.');
+                        return await Tesseract.recognize(img, 'eng', {
+                            tessedit_ocr_engine_mode: 1, // LSTM
+                            tessedit_pageseg_mode: 6, // Single block
+                            preserve_interword_spaces: 1,
+                            tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.,!?;:\'\"()[]{}/-_@#$%^&*+=<>~ \n\t',
+                            tessedit_reject_mode: 5,
+                            load_system_dawg: 1,
+                            load_freq_dawg: 1,
+                            // Enhanced Tesseract preprocessing options instead of manual preprocessing
+                            textord_debug_images: 0,
+                            textord_noise_normratio: 2,
+                            textord_noise_translimit: 16,
+                            textord_noise_sncount: 1,
+                            classify_bln_numeric_mode: 1
+                        });
+                    }
+                }
+            });
+        }
+
+        // Method 4: Character-Restricted OCR - Very strict character limitations
+        async function runRestrictedOCR(index) {
+            await runOCRWithMethod(index, 'Character-Limited', {
+                logger: createProgressLogger(index, 'Character-Limited'),
+                recognize: async (img) => {
+                    return await Tesseract.recognize(img, 'eng', {
+                        tessedit_ocr_engine_mode: 1, // LSTM
+                        tessedit_pageseg_mode: 6, // Single block
+                        preserve_interword_spaces: 1,
+                        // VERY restrictive - only letters, numbers, basic punctuation
+                        tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.,!? \n',
+                        // Reject anything with low confidence
+                        tessedit_reject_mode: 5,
+                        classify_bln_numeric_mode: 1,
+                        // Don't allow single character words (often artifacts)
+                        tessedit_reject_alphas_in_number_mode: 1,
+                        // Use dictionary to validate words
+                        load_system_dawg: 1,
+                        load_freq_dawg: 1
+                    });
+                }
+            });
+        }
+
+        // Image preprocessing function to improve OCR quality
+        async function preprocessImage(img) {
+            return new Promise((resolve, reject) => {
+                try {
+                    // Create a new image with CORS enabled
+                    const corsImage = new Image();
+                    corsImage.crossOrigin = 'anonymous';
+                    
+                    corsImage.onload = function() {
+                        try {
+                            const canvas = document.createElement('canvas');
+                            const ctx = canvas.getContext('2d');
+                            
+                            canvas.width = corsImage.naturalWidth || corsImage.width;
+                            canvas.height = corsImage.naturalHeight || corsImage.height;
+                            
+                            // Draw the CORS-enabled image
+                            ctx.drawImage(corsImage, 0, 0, canvas.width, canvas.height);
+                            
+                            // Get image data - this will throw if CORS fails
+                            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                            const data = imageData.data;
+                            
+                            // Apply preprocessing filters
+                            for (let i = 0; i < data.length; i += 4) {
+                                // Convert to grayscale
+                                const gray = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+                                
+                                // Increase contrast and reduce noise
+                                const enhanced = gray > 128 ? 255 : 0; // Threshold to black/white
+                                
+                                data[i] = enhanced;     // Red
+                                data[i + 1] = enhanced; // Green
+                                data[i + 2] = enhanced; // Blue
+                                // Alpha stays the same
+                            }
+                            
+                            // Put processed image back
+                            ctx.putImageData(imageData, 0, 0);
+                            
+                            // Convert canvas to image
+                            const processedImg = new Image();
+                            processedImg.onload = () => resolve(processedImg);
+                            processedImg.onerror = () => reject(new Error('Failed to create processed image'));
+                            processedImg.src = canvas.toDataURL();
+                            
+                        } catch (canvasError) {
+                            console.log('Canvas processing failed (likely CORS):', canvasError.message);
+                            reject(new Error('CORS restriction prevents image preprocessing'));
+                        }
+                    };
+                    
+                    corsImage.onerror = function() {
+                        console.log('CORS image loading failed, CORS not supported by server');
+                        reject(new Error('CORS not supported for this image'));
+                    };
+                    
+                    // Try to load the image with CORS
+                    corsImage.src = img.src;
+                    
+                } catch (error) {
+                    console.log('Image preprocessing setup failed:', error.message);
+                    reject(error);
+                }
+            });
+        }
+
+        // Create progress logger for each method
+        function createProgressLogger(index, methodName) {
+            return (m) => {
+                if (m.status === 'recognizing text') {
+                    const progress = Math.round(m.progress * 100);
+                    const ocrContent = document.getElementById(`ocrContent${index}`);
+                    if (ocrContent) {
+                        ocrContent.innerHTML = `
+                            <div class="loading">
+                                <div class="spinner"></div>
+                                <p>${methodName}: ${progress}%</p>
+                                <p style="font-size: 12px;">Processing with enhanced character filtering...</p>
+                            </div>
+                        `;
+                    }
+                }
+            };
+        }
+
+        // Generic OCR runner for different methods
+        async function runOCRWithMethod(index, methodName, config) {
+            const ocrContent = document.getElementById(`ocrContent${index}`);
+            
+            try {
+                const img = document.querySelector(`#imageView${index} img`);
+                
+                // Wait for image to load
+                await new Promise((resolve) => {
+                    if (img.complete) resolve();
+                    else img.onload = resolve;
+                });
+
+                console.log(`Running ${methodName} OCR...`);
+
+                // Use the custom recognition function
+                const result = await config.recognize(img);
+                const extractedText = result.data.text;
+                const confidence = result.data.confidence;
+
+                // Minimal post-processing - just basic cleanup
+                const cleanedText = basicTextCleanup(extractedText);
+
+                posts[index].ocrText = cleanedText;
+                ocrCache.set(index, cleanedText);
+                displayOCRResult(index, cleanedText, methodName, confidence);
+
+            } catch (error) {
+                console.error(`${methodName} OCR error:`, error);
+                ocrContent.innerHTML = `
+                    <div style="color: #ff6b6b; padding: 15px; background: rgba(255,0,0,0.1); border-radius: 8px;">
+                        <h4>${methodName} OCR Failed</h4>
+                        <p>${error.message}</p>
+                        <button class="btn" onclick="performOCR(${index})" style="margin-top: 10px;">Try Different Method</button>
+                    </div>
+                `;
+            }
+        }
+
+        // Basic text cleanup - minimal processing to preserve OCR engine work
+        function basicTextCleanup(text) {
+            let cleaned = text;
+            
+            // Only do essential cleanup that doesn't mask OCR engine issues
+            cleaned = cleaned.replace(/\s{2,}/g, ' '); // Multiple spaces to single
+            cleaned = cleaned.replace(/^\s+|\s+$/g, ''); // Trim whitespace
+            
+            // Fix obvious punctuation spacing issues
+            cleaned = cleaned.replace(/\s+([,.!?;:])/g, '$1');
+            cleaned = cleaned.replace(/([,.!?;:])\s*([a-zA-Z])/g, '$1 $2');
+            
+            return cleaned;
+        }
+
+        function displayOCRResult(index, text, methodName = 'OCR', confidence = 0) {
+            const ocrContent = document.getElementById(`ocrContent${index}`);
+            const wordCount = text.split(/\s+/).filter(word => word.length > 0).length;
+            const confidenceLevel = confidence > 70 ? 'High' : confidence > 40 ? 'Medium' : 'Low';
+            
+            ocrContent.innerHTML = `
+                <div style="background: rgba(255,255,255,0.05); padding: 15px; border-radius: 8px; margin-top: 15px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                        <h4>🔍 ${methodName} OCR Result</h4>
+                        <small style="color: rgba(255,255,255,0.7);">
+                            ${wordCount} words • ${confidenceLevel} confidence
+                        </small>
+                    </div>
+                    
+                    <div style="margin: 15px 0;">
+                        <div style="max-height: 200px; overflow-y: auto; padding: 15px; background: rgba(0,0,0,0.3); border-radius: 5px; border: 1px solid rgba(255,255,255,0.1);">
+                            <textarea id="ocrText${index}" style="width: 100%; min-height: 120px; background: transparent; border: none; color: #fff; font-family: 'Courier New', monospace; font-size: 14px; line-height: 1.4; resize: vertical;" placeholder="Extracted text will appear here...">${text}</textarea>
+                        </div>
+                        <small style="color: rgba(255,255,255,0.6); margin-top: 5px; display: block;">
+                            💡 Text is editable - fix any remaining errors manually
+                        </small>
+                    </div>
+                    
+                    <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-top: 15px;">
+                        <button class="btn" onclick="performOCR(${index})" style="font-size: 12px;">
+                            🔄 Try Different Method
+                        </button>
+                        <button class="btn" onclick="copyOCRText(${index})" style="font-size: 12px;">
+                            📋 Copy Text
+                        </button>
+                        <button class="btn" onclick="downloadOCRText(${index})" style="font-size: 12px;">
+                            💾 Save as .txt
+                        </button>
+                        <button class="btn" onclick="showCloudOCROptions(${index})" style="font-size: 12px; background: rgba(0,150,255,0.3);">
+                            ☁️ Try Cloud OCR
+                        </button>
+                    </div>
+                </div>
+            `;
+        }
+
+        function copyOCRText(index) {
+            const textArea = document.getElementById(`ocrText${index}`);
+            const text = textArea.value;
+            navigator.clipboard.writeText(text).then(() => {
+                showNotification('✅ Text copied to clipboard!');
+            }).catch(() => {
+                // Fallback for older browsers
+                textArea.select();
+                document.execCommand('copy');
+                showNotification('✅ Text copied to clipboard!');
+            });
+        }
+
+        function downloadOCRText(index) {
+            const textArea = document.getElementById(`ocrText${index}`);
+            const text = textArea.value;
+            const postTitle = posts[index].originalTitle || posts[index].title;
+            
+            const blob = new Blob([text], { type: 'text/plain' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `${postTitle.replace(/[^a-z0-9]/gi, '_')}_page_${index + 1}.txt`;
+            link.click();
+            URL.revokeObjectURL(url);
+            
+            showNotification('💾 Text file downloaded!');
+        }
+
+        function showNotification(message) {
+            const notification = document.createElement('div');
+            notification.style.cssText = `
+                position: fixed; top: 20px; right: 20px; 
+                background: rgba(0,0,0,0.8); color: white; 
+                padding: 10px 15px; border-radius: 5px; 
+                z-index: 9999; font-size: 14px;
+                backdrop-filter: blur(10px);
+                border: 1px solid rgba(255,255,255,0.2);
+            `;
+            notification.textContent = message;
+            document.body.appendChild(notification);
+            setTimeout(() => document.body.removeChild(notification), 3000);
+        }
+
+        // Cloud OCR options for better accuracy
+        function showCloudOCROptions(index) {
+            const ocrContent = document.getElementById(`ocrContent${index}`);
+            
+            ocrContent.innerHTML = `
+                <div style="background: rgba(0,100,200,0.1); padding: 15px; border-radius: 8px; margin-top: 15px;">
+                    <h4>🌩️ Cloud OCR Options</h4>
+                    <p style="margin: 10px 0;">For the highest accuracy on typewritten text, use these professional services:</p>
+                    
+                    <div style="margin: 15px 0;">
+                        <h5>📱 Mobile Apps (Recommended)</h5>
+                        <ul style="margin: 10px 0 10px 20px;">
+                            <li><strong>Adobe Scan</strong> - Free, excellent for documents</li>
+                            <li><strong>Microsoft Office Lens</strong> - Great OCR accuracy</li>
+                            <li><strong>Google Keep</strong> - Extract text from photos</li>
+                        </ul>
+                    </div>
+                    
+                    <div style="margin: 15px 0;">
+                        <h5>🌐 Online Services</h5>
+                        <ul style="margin: 10px 0 10px 20px;">
+                            <li><a href="https://www.onlineocr.net/" target="_blank" style="color: #66c0f4;">OnlineOCR.net</a> - Free, supports typewritten text</li>
+                            <li><a href="https://www.imagetotext.info/" target="_blank" style="color: #66c0f4;">ImageToText.info</a> - Good for handwritten/typed text</li>
+                            <li><a href="https://www.prepostseo.com/image-to-text" target="_blank" style="color: #66c0f4;">PrePostSEO</a> - Multiple OCR engines</li>
+                        </ul>
+                    </div>
+                    
+                    <div style="margin: 15px 0;">
+                        <h5>💡 Why Cloud OCR Works Better</h5>
+                        <ul style="margin: 10px 0 10px 20px;">
+                            <li>Uses more sophisticated AI models</li>
+                            <li>Better training data for typewritten text</li>
+                            <li>Advanced preprocessing algorithms</li>
+                            <li>Professional-grade character recognition</li>
+                        </ul>
+                    </div>
+                    
+                    <div style="margin-top: 15px;">
+                        <button class="btn" onclick="downloadImageForOCR(${index})">📥 Download Image for Cloud OCR</button>
+                        <button class="btn" onclick="performOCR(${index})" style="margin-left: 10px;">🔄 Try Local OCR Again</button>
+                    </div>
+                </div>
+            `;
+        }
+
+        function downloadImageForOCR(index) {
+            const currentPost = posts[index];
+            if (currentPost && currentPost.imageUrl) {
+                const link = document.createElement('a');
+                link.href = currentPost.imageUrl;
+                link.download = `typewritten-page-${index + 1}.jpg`;
+                link.click();
+                
+                showNotification('📥 Image downloaded! Upload to a cloud OCR service for best results.');
+            }
+        }
+
+        // Navigation functions
+        function nextPost() {
+            if (currentIndex < posts.length - 1) {
+                currentIndex++;
+                updateViewerPosition();
+                updateNavigation();
+                resetZoom();
+            }
+        }
+
+        function previousPost() {
+            if (currentIndex > 0) {
+                currentIndex--;
+                updateViewerPosition();
+                updateNavigation();
+                resetZoom();
+            }
+        }
+
+        function updateNavigation() {
+            const prevBtn = document.getElementById('prevBtn');
+            const nextBtn = document.getElementById('nextBtn');
+            const pageIndicator = document.getElementById('pageIndicator');
+
+            prevBtn.disabled = currentIndex === 0;
+            nextBtn.disabled = currentIndex === posts.length - 1;
+            
+            // Show different text if these are pages from the same post
+            if (posts.length > 0 && posts[0].isFromSamePost) {
+                pageIndicator.textContent = `Page ${currentIndex + 1} / ${posts.length} - ${posts[0].originalTitle}`;
+            } else {
+                pageIndicator.textContent = `${currentIndex + 1} / ${posts.length}`;
+            }
+        }
+
+        // View toggle functions
+        function setView(view) {
+            const toggleBtns = document.querySelectorAll('.toggle-btn');
+            const zoomControls = document.getElementById('zoomControls');
+            
+            toggleBtns.forEach(btn => btn.classList.remove('active'));
+            event.target.classList.add('active');
+            
+            currentView = view;
+            
+            if (view === 'image') {
+                document.getElementById(`imageView${currentIndex}`).style.display = 'block';
+                document.getElementById(`textView${currentIndex}`).classList.remove('active');
+                zoomControls.style.display = 'flex';
+            } else {
+                document.getElementById(`imageView${currentIndex}`).style.display = 'none';
+                document.getElementById(`textView${currentIndex}`).classList.add('active');
+                zoomControls.style.display = 'none';
+            }
+        }
+
+        // Zoom functions
+        function zoomIn() {
+            currentZoom = Math.min(currentZoom * 1.2, 5);
+            applyZoom();
+        }
+
+        function zoomOut() {
+            currentZoom = Math.max(currentZoom / 1.2, 0.5);
+            applyZoom();
+        }
+
+        function resetZoom() {
+            currentZoom = 1;
+            applyZoom();
+        }
+
+        function applyZoom() {
+            const img = document.querySelector(`#imageView${currentIndex} img`);
+            if (img) {
+                img.style.transform = `scale(${currentZoom})`;
+            }
+        }
+
+        // Touch event handling
+        function setupTouchEvents() {
+            const viewer = document.getElementById('viewer');
+            let isDragging = false;
+            let startX = 0;
+            let threshold = 50;
+
+            viewer.addEventListener('touchstart', (e) => {
+                startX = e.touches[0].clientX;
+                isDragging = true;
+            }, { passive: true });
+
+            viewer.addEventListener('touchmove', (e) => {
+                if (!isDragging) return;
+                
+                // Allow zoom/pan for images when zoomed
+                if (currentView === 'image' && currentZoom > 1) {
+                    return;
+                }
+                
+                e.preventDefault();
+            }, { passive: false });
+
+            viewer.addEventListener('touchend', (e) => {
+                if (!isDragging) return;
+                
+                const endX = e.changedTouches[0].clientX;
+                const diffX = startX - endX;
+                
+                if (Math.abs(diffX) > threshold) {
+                    if (diffX > 0) {
+                        nextPost();
+                    } else {
+                        previousPost();
+                    }
+                }
+                
+                isDragging = false;
+            }, { passive: true });
+
+            // Keyboard navigation
+            document.addEventListener('keydown', (e) => {
+                switch(e.key) {
+                    case 'ArrowLeft':
+                        previousPost();
+                        break;
+                    case 'ArrowRight':
+                        nextPost();
+                        break;
+                    case 'Escape':
+                        if (document.fullscreenElement) {
+                            document.exitFullscreen();
+                        }
+                        break;
+                }
+            });
+        }
+
+        // Utility functions
+        function refreshData() {
+            posts = [];
+            currentIndex = 0;
+            ocrCache.clear();
+            loadPosts();
+        }
+
+        function showError(message) {
+            const viewer = document.getElementById('viewer');
+            viewer.innerHTML = `
+                <div class="error-message">
+                    <h3>⚠️ Error</h3>
+                    <pre style="white-space: pre-wrap; font-family: inherit; margin-top: 10px;">${message}</pre>
+                    <div style="margin-top: 15px; display: flex; gap: 10px; flex-wrap: wrap; justify-content: center;">
+                        <button class="btn" onclick="refreshData()">Try Again</button>
+                        <button class="btn" onclick="window.debugRSSFeed()">Debug Feed</button>
+                        <button class="btn" onclick="window.loadSampleData()">Load Sample Data</button>
+                    </div>
+                </div>
+            `;
+        }
+
+        function toggleFullscreen() {
+            if (!document.fullscreenElement) {
+                document.documentElement.requestFullscreen().catch(err => {
+                    console.error('Error entering fullscreen:', err);
+                });
+            } else {
+                document.exitFullscreen();
+            }
+        }
+
+        function downloadImage() {
+            const currentPost = posts[currentIndex];
+            if (currentPost && currentPost.imageUrl) {
+                const link = document.createElement('a');
+                link.href = currentPost.imageUrl;
+                link.download = `${currentPost.title.replace(/[^a-z0-9]/gi, '_')}.jpg`;
+                link.click();
+            }
+        }
+
+        function exportMarkdown() {
+            let markdown = '# One Typed Page Collection\n\n';
+            
+            posts.forEach((post, index) => {
+                markdown += `## ${post.title}\n\n`;
+                markdown += `**Date:** ${new Date(post.pubDate).toLocaleDateString()}\n\n`;
+                markdown += `**Original Link:** [View Post](${post.link})\n\n`;
+                markdown += `**Image:** ![${post.title}](${post.imageUrl})\n\n`;
+                
+                if (post.ocrText) {
+                    markdown += `**Extracted Text:**\n\n\`\`\`\n${post.ocrText}\n\`\`\`\n\n`;
+                } else {
+                    markdown += `*Text not yet extracted*\n\n`;
+                }
+                
+                markdown += '---\n\n';
+            });
+
+            document.getElementById('markdownContent').textContent = markdown;
+            document.getElementById('markdownModal').classList.add('active');
+        }
+
+        function closeModal() {
+            document.getElementById('markdownModal').classList.remove('active');
+        }
+
+        // Global debug and sample functions (defined before DOMContentLoaded)
+        window.debugRSSFeed = async function() {
+            console.log('=== RSS Feed Debug Mode v4.0 ===');
+            
+            const targetUrl = 'https://onetypedpage.com/feed/';
+            const proxies = [
+                { url: 'https://corsproxy.io/?', headers: {} },
+                { url: 'https://api.allorigins.win/raw?url=', headers: {} },
+                { url: 'https://corsproxy.org/?', headers: {} },
+                { url: 'https://cors.bridged.cc/', headers: {} },
+                { url: 'https://api.codetabs.com/v1/proxy?quest=', headers: {} },
+                { url: 'https://cors-fix.vercel.app/api/cors?url=', headers: {} },
+                { url: 'https://thingproxy.freeboard.io/fetch/', headers: {} },
+                { url: 'https://api.allorigins.win/get?url=', headers: {}, isJson: true },
+                { url: 'https://crossorigin.me/', headers: {} }
+            ];
+            
+            for (const proxy of proxies) {
+                try {
+                    console.log(`\n--- Testing ${proxy.url} ---`);
+                    const requestUrl = proxy.url + encodeURIComponent(targetUrl);
+                    console.log('Request URL:', requestUrl);
+                    
+                    const response = await fetch(requestUrl, {
+                        headers: { 'User-Agent': 'Mozilla/5.0 (compatible; RSS Reader)', ...proxy.headers }
+                    });
+                    console.log('Response status:', response.status, response.statusText);
+                    
+                    if (response.ok) {
+                        let responseText;
+                        if (proxy.isJson) {
+                            const jsonData = await response.json();
+                            responseText = jsonData.contents;
+                        } else {
+                            responseText = await response.text();
+                        }
+                        
+                        console.log('Response length:', responseText.length);
+                        console.log('First 1000 chars:', responseText.substring(0, 1000));
+                        
+                        if (responseText.includes('<?xml') || responseText.includes('<rss')) {
+                            console.log('✅ Valid XML detected');
+                            
+                            const parser = new DOMParser();
+                            const xmlDoc = parser.parseFromString(responseText, 'text/xml');
+                            const items = xmlDoc.querySelectorAll('item');
+                            console.log('Items found:', items.length);
+                            
+                            if (items.length > 0) {
+                                const firstItem = items[0];
+                                const title = firstItem.querySelector('title')?.textContent;
+                                
+                                console.log('\n--- First Item Analysis ---');
+                                console.log('Title:', title);
+                                
+                                // Check all possible content fields
+                                const contentFields = [
+                                    { name: 'description', value: firstItem.querySelector('description')?.textContent || '' },
+                                    { name: 'content:encoded', value: firstItem.querySelector('content\\:encoded')?.textContent || '' },
+                                    { name: 'content', value: firstItem.querySelector('content')?.textContent || '' },
+                                    { name: 'summary', value: firstItem.querySelector('summary')?.textContent || '' }
+                                ];
+                                
+                                contentFields.forEach(field => {
+                                    console.log(`${field.name}: ${field.value.length} chars`);
+                                    if (field.value.length > 0) {
+                                        console.log(`${field.name} sample:`, field.value.substring(0, 300));
+                                        
+                                        // Look for images in this field
+                                        const imgMatches = field.value.match(/<img[^>]+src=["']([^"']+)["']/gi) || [];
+                                        const urlMatches = field.value.match(/https?:\/\/[^"\s<>]+\.(?:jpg|jpeg|png|gif|webp)/gi) || [];
+                                        
+                                        if (imgMatches.length > 0) {
+                                            console.log(`Found ${imgMatches.length} img tags in ${field.name}`);
+                                            imgMatches.forEach((match, i) => console.log(`  ${i + 1}: ${match}`));
+                                        }
+                                        
+                                        if (urlMatches.length > 0) {
+                                            console.log(`Found ${urlMatches.length} image URLs in ${field.name}`);
+                                            urlMatches.forEach((url, i) => console.log(`  ${i + 1}: ${url}`));
+                                        }
+                                    }
+                                });
+                                
+                                console.log('\n--- Raw XML Structure ---');
+                                console.log('First 2000 chars of item XML:', firstItem.outerHTML.substring(0, 2000));
+                            }
+                            break;
+                        } else {
+                            console.log('❌ No XML content detected');
+                        }
+                    } else {
+                        console.log('❌ Request failed');
+                    }
+                } catch (error) {
+                    console.log('❌ Error:', error.message);
+                }
+            }
+            
+            console.log('\n=== Debug complete ===');
+            console.log('If you downloaded the HTML file, try running it locally - CORS may work better that way');
+        };
+        
+        // Sample data function
+        window.loadSampleData = function() {
+            console.log('Loading sample data for testing...');
+            posts = [
+                {
+                    title: "Sample Typewritten Page 1",
+                    link: "https://onetypedpage.com/sample1",
+                    description: "A sample typewritten page for testing the mobile interface.",
+                    imageUrl: "https://via.placeholder.com/600x800/333/fff?text=Sample+Typewritten+Page+1",
+                    pubDate: new Date().toISOString(),
+                    ocrText: "",
+                    isFromSamePost: true,
+                    originalTitle: "Sample Multi-Page Post",
+                    pageNumber: 1,
+                    totalPages: 3
+                },
+                {
+                    title: "Sample Typewritten Page 2", 
+                    link: "https://onetypedpage.com/sample2",
+                    description: "Another sample typewritten page with different content.",
+                    imageUrl: "https://via.placeholder.com/600x800/444/fff?text=Sample+Typewritten+Page+2",
+                    pubDate: new Date().toISOString(),
+                    ocrText: "",
+                    isFromSamePost: true,
+                    originalTitle: "Sample Multi-Page Post",
+                    pageNumber: 2,
+                    totalPages: 3
+                },
+                {
+                    title: "Sample Typewritten Page 3",
+                    link: "https://onetypedpage.com/sample3", 
+                    description: "A third sample page to test navigation.",
+                    imageUrl: "https://via.placeholder.com/600x800/555/fff?text=Sample+Typewritten+Page+3",
+                    pubDate: new Date().toISOString(),
+                    ocrText: "",
+                    isFromSamePost: true,
+                    originalTitle: "Sample Multi-Page Post",
+                    pageNumber: 3,
+                    totalPages: 3
+                }
+            ];
+            
+            const loading = document.getElementById('loading');
+            const navigation = document.getElementById('navigation');
+            
+            renderPosts();
+            loading.style.display = 'none';
+            navigation.classList.remove('hidden');
+            updateNavigation();
+            
+            console.log('Sample data loaded! You can now test the interface.');
+        };
+
+        // Make manual input function globally available
+        window.loadFromManualInput = loadFromManualInput;
+
+        // Initialize the app
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('🚀 One Typed Page Mobile Viewer v4.0 - GENUINE OCR METHODS');
+            console.log('Features 4 fundamentally different OCR approaches to prevent character artifacts');
+            setupTouchEvents();
+            loadPosts();
+        });
+
+        // Hide UI on inactivity
+        let hideTimeout;
+        function resetHideTimeout() {
+            clearTimeout(hideTimeout);
+            const header = document.getElementById('header');
+            const navigation = document.getElementById('navigation');
+            
+            header.classList.remove('hidden');
+            navigation.classList.remove('hidden');
+            
+            hideTimeout = setTimeout(() => {
+                if (document.fullscreenElement) {
+                    header.classList.add('hidden');
+                    navigation.classList.add('hidden');
+                }
+            }, 3000);
+        }
+
+        document.addEventListener('touchstart', resetHideTimeout);
+        document.addEventListener('mousemove', resetHideTimeout);
+        document.addEventListener('fullscreenchange', resetHideTimeout);
+    </script>
+</body>
+</html>
